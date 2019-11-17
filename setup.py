@@ -24,7 +24,7 @@ setup(
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/development.html#single-sourcing-the-version
-    #version='0.0.2',
+    # version='0.0.2',
     version=__version__,
 
     description='QuantStart.com - Advanced Trading Infrastructure',
@@ -57,16 +57,16 @@ setup(
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
         'Programming Language :: Cython',
-
         'Programming Language :: Python',
         #'Programming Language :: Python :: 2',
         #'Programming Language :: Python :: 2.6',
-        'Programming Language :: Python :: 2.7',
+        #'Programming Language :: Python :: 2.7',
         #'Programming Language :: Python :: 3',
         #'Programming Language :: Python :: 3.2',
         #'Programming Language :: Python :: 3.3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.6',
 
         # Pick your license as you wish (should match "license" above)
         'License :: OSI Approved :: MIT License',
