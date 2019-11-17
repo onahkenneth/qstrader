@@ -1,101 +1,52 @@
-# The MIT License (MIT)
-#
-# Copyright (c) 2015 QuantStart.com, QuarkGluon Ltd
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-# SOFTWARE.
+import datetime
 
-import numpy as np
-
-from qstrader.exchange.exchange import (
-    Exchange, ExchangeException
-)
-from qstrader.exchange.price_volume_data_source import (
-    PriceVolumeDataSourceException
-)
+from qstrader.exchange.exchange import Exchange
 
 
 class SimulatedExchange(Exchange):
-    """The SimulatedExchange class is used to model a live
-    trading venue. Its task is to initialise a set of provided
-    PriceVolumeDataSource instances (RDBMS, CSV, time series DB).
+    """
+    The SimulatedExchange class is used to model a live
+    trading venue.
 
-    The model exposes a get_latest_asset_price method, which queries
-    each data source in turn in an attempt to find the latest known
-    price for the asset, based on provided historical or simulated
-    asset data.
+    It exposes methods to inform a client class intance of
+    when the exchange is open to determine when orders can
+    be executed.
 
-    It also exposes methods to inform a client class intance of
-    when the exchange is open (and thus can receive Orders).
+    Parameters
+    ----------
+    start_dt : `pd.Timestamp`
+        The starting time of the simulated exchange.
     """
 
-    def __init__(self, start_dt, data_sources):
-        """
-        Initialise the SimulatedExchange.
-        """
+    def __init__(self, start_dt):
         self.start_dt = start_dt
-        self.cur_dt = start_dt
-        self.data_sources = data_sources
+
+        # TODO: Eliminate hardcoding of NYSE
+        # TODO: Make these timezone-aware
+        self.open_dt = datetime.time(14, 30)
+        self.close_dt = datetime.time(21, 00)
 
     def is_open_at_datetime(self, dt):
         """
         Check if the SimulatedExchange is open at a particular
         provided pandas Timestamp.
-        """
-        # TODO: Utilise an exchange calendar to adjust this.
-        return True
 
-    def is_open_now(self):
-        """
-        Check if the SimulatedExchange is open "now", as far as
-        the Exchange understands "now" (via its cur_dt attribute).
-        """
-        # TODO: Utilise an exchange calendar to adjust this.
-        return True
+        This logic is simplistic in that it only checks whether
+        the provided time is between market hours on a weekday.
 
-    def get_latest_asset_bid_ask(self, asset):
-        """
-        Iteratively checks each provided data source for the
-        availability of an Asset price and returns (bid, ask),
-        if available.
+        There is no historical calendar handling or concept of
+        exchange holidays.
 
-        For OHLCV data this returns (midpoint, midpoint). If no
-        price is available this returns (np.NaN, np.NaN).
-        """
-        for ds in self.data_sources:
-            if ds.asset == asset:
-                try:
-                    ds_price = ds.get_latest_asset_price_at_dt(self.cur_dt)
-                except PriceVolumeDataSourceException:
-                    pass
-                else:
-                    return ds_price
-        return (np.NaN, np.NaN)
+        Parameters
+        ----------
+        dt : `pd.Timestamp`
+            The timestamp to check for open market hours.
 
-    def update(self, dt):
+        Returns
+        -------
+        `Boolean`
+            Whether the exchange is open at this timestamp.
         """
-        Update the current time for the SimulatedExchange.
-        """
-        if dt < self.cur_dt:
-            raise ExchangeException(
-                'Provided datetime (%s) is earlier than '
-                'current exchange datetime (%s). Cannot '
-                'update Exchange.' % (dt, self.cur_dt)
-            )
-        else:
-            self.cur_dt = dt
+        if dt.weekday() > 4:
+            return False
+        return self.open_dt <= dt.time() and dt.time() < self.close_dt

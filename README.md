@@ -1,27 +1,16 @@
-# QSTrader 
+![GitHub](https://img.shields.io/github/license/mhallsmoore/qstrader)
+[![Build Status](https://travis-ci.org/mhallsmoore/qstrader.svg?branch=development)](https://travis-ci.org/mhallsmoore/qstrader/branches)
+[![Coverage Status](https://coveralls.io/repos/github/mhallsmoore/qstrader/badge.svg?branch=development)](https://coveralls.io/github/mhallsmoore/qstrader?branch=development)
 
-QSTrader is an open-source event-driven backtesting, simulation and live trading platform.
+# QSTrader
 
-It is currently being rewritten to ensure:
+QSTrader is an open-source highly modular schedule-driven backtesting platform for use predominantly in the cash equities markets. It is currently in an alpha state, but is being actively developed.
 
-* It is more akin to a portfolio/order management system (OMS)
-* It is significantly more optimised for intraday trading (minutely frequency)
-* It makes use of up to date versions of Python (3.5-3.6) and libraries
-* Simulation accuracy is significantly more realistic with regards transaction costs, restrictions and regulatory constraints
-
-# Development
-
-QSTrader will now make use of the [Gitflow Workflow](https://www.atlassian.com/git/tutorials/comparing-workflows#gitflow-workflow) approach to version control and deployment.
-
-The most important point of this is that any new feature branches must be branched from the *deployment* branch such that all Pull Requests compare against *develop* rather than *master*. Only *release* branches will be merged into master for deployment.
-
-If you have not utilised a Gitflow workflow before please read the above link to familiarise yourself.
+The software is provided under a permissive "MIT" license.
 
 # License Terms
 
-MIT License
-
-Copyright (c) 2015-2017 QuantStart.com, QuarkGluon Ltd.
+Copyright (c) 2015-2019 QuantStart.com, QuarkGluon Ltd
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
