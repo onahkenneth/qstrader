@@ -32,6 +32,8 @@ class QuantTradingSystem(object):
         The specific broker portfolio to send orders to.
     data_handler : `DataHandler`
         The data handler instance used for all market/fundamental data.
+    cash_buffer_percentage : `float`, optional
+        The percentage of the portfolio to retain in cash.
     submit_orders : `Boolean`, optional
         Whether to actually submit generated orders. Defaults to no submission.
     """
@@ -43,6 +45,7 @@ class QuantTradingSystem(object):
         broker_portfolio_id,
         data_handler,
         alpha_model,
+        cash_buffer_percentage=0.05,
         submit_orders=False
     ):
         self.universe = universe
@@ -50,6 +53,7 @@ class QuantTradingSystem(object):
         self.broker_portfolio_id = broker_portfolio_id
         self.data_handler = data_handler
         self.alpha_model = alpha_model
+        self.cash_buffer_percentage = cash_buffer_percentage
         self.submit_orders = submit_orders
         self._initialise_models()
 
@@ -67,7 +71,8 @@ class QuantTradingSystem(object):
         order_sizer = DollarWeightedCashBufferedOrderSizeGeneration(
             self.broker,
             self.broker_portfolio_id,
-            self.data_handler
+            self.data_handler,
+            cash_buffer_percentage=self.cash_buffer_percentage
         )
         optimiser = FixedWeightPortfolioOptimiser(
             data_handler=self.data_handler
@@ -93,7 +98,7 @@ class QuantTradingSystem(object):
             data_handler=self.data_handler
         )
 
-    def __call__(self, dt):
+    def __call__(self, dt, stats=None):
         """
         Construct the portfolio and (optionally) execute the orders
         with the broker.
@@ -102,13 +107,16 @@ class QuantTradingSystem(object):
         ----------
         dt : `pd.Timestamp`
             The current time.
+        stats : `dict`, optional
+            An optional statistics dictionary to append values to
+            throughout the simulation lifetime.
 
         Returns
         -------
         `None`
         """
         # Construct the target portfolio
-        rebalance_orders = self.portfolio_construction_model(dt)
+        rebalance_orders = self.portfolio_construction_model(dt, stats=stats)
 
         # Execute the orders
         self.execution_handler(dt, rebalance_orders)

@@ -1,5 +1,6 @@
 import os
-import pprint
+
+import pandas as pd
 
 from qstrader.asset.equity import Equity
 from qstrader.asset.universe.static import StaticUniverse
@@ -9,12 +10,16 @@ from qstrader.data.backtest_data_handler import BacktestDataHandler
 from qstrader.data.daily_bar_csv import CSVDailyBarDataSource
 from qstrader.exchange.simulated_exchange import SimulatedExchange
 from qstrader.simulation.daily_bday import DailyBusinessDaySimulationEngine
-from qstrader.statistics.tearsheet import TearsheetStatistics
 from qstrader.system.qts import QuantTradingSystem
 from qstrader.system.rebalance.buy_and_hold import BuyAndHoldRebalance
 from qstrader.system.rebalance.end_of_month import EndOfMonthRebalance
 from qstrader.system.rebalance.weekly import WeeklyRebalance
 from qstrader.trading.trading_session import TradingSession
+
+
+DEFAULT_ACCOUNT_NAME = 'Backtest Simulated Broker Account'
+DEFAULT_PORTFOLIO_ID = '000001'
+DEFAULT_PORTFOLIO_NAME = 'Backtest Simulated Broker Portfolio'
 
 
 class BacktestTradingSession(TradingSession):
@@ -39,6 +44,20 @@ class BacktestTradingSession(TradingSession):
         The initial account equity (defaults to $1MM)
     rebalance : `str`, optional
         The rebalance frequency of the backtest, defaulting to 'weekly'.
+    account_name : `str`, optional
+        The name of the simulated broker account.
+    portfolio_id : `str`, optional
+        The ID of the portfolio being used for the backtest.
+    portfolio_name : `str`, optional
+        The name of the portfolio being used for the backtest.
+    cash_buffer_percentage : `float`, optional
+        The percentage of the portfolio to retain in cash.
+    fees : `FeeModel` class (not instance), optional
+        The optional FeeModel class to use for transaction cost estimates.
+        TODO: FeeModels are currently not supported.
+    burn_in_dt : `pd.Timestamp`, optional
+        The optional date provided to begin tracking strategy statistics,
+        which is used for strategies requiring a period of data 'burn in'
     """
 
     def __init__(
@@ -49,7 +68,13 @@ class BacktestTradingSession(TradingSession):
         alpha_model,
         initial_cash=1e6,
         rebalance='weekly',
-        fees=None
+        account_name=DEFAULT_ACCOUNT_NAME,
+        portfolio_id=DEFAULT_PORTFOLIO_ID,
+        portfolio_name=DEFAULT_PORTFOLIO_NAME,
+        cash_buffer_percentage=0.05,
+        fees=None,
+        burn_in_dt=None,
+        **kwargs
     ):
         self.start_dt = start_dt
         self.end_dt = end_dt
@@ -57,28 +82,35 @@ class BacktestTradingSession(TradingSession):
         self.alpha_model = alpha_model
         self.initial_cash = initial_cash
         self.rebalance = rebalance
+        self.account_name = account_name
+        self.portfolio_id = portfolio_id
+        self.portfolio_name = portfolio_name
+        self.cash_buffer_percentage = cash_buffer_percentage
         self.fees = fees
+        self.burn_in_dt = burn_in_dt
 
-        # Create the exchange and market hours
         self.exchange = self._create_exchange()
-
-        # Create the appropriate data sources
         self.universe = self._create_asset_universe()
         self.data_handler = self._create_data_handler()
-
-        # Initialise the broker and broker fee model
         self.fee_model = self._create_broker_fee_model()
         self.broker = self._create_broker()
-
-        # Simulation engine
         self.sim_engine = self._create_simulation_engine()
 
-        # Quant trading engine and rebalancing
+        if rebalance == 'weekly':
+            if 'rebalance_weekday' in kwargs:
+                self.rebalance_weekday = kwargs['rebalance_weekday']
+            else:
+                raise ValueError(
+                    "Rebalance frequency was set to 'weekly' but no specific "
+                    "weekday was provided. Try adding the 'rebalance_weekday' "
+                    "keyword argument to the instantiation of "
+                    "BacktestTradingSession, e.g. with 'WED'."
+                )
         self.rebalance_schedule = self._create_rebalance_event_times()
-        self.qts = self._create_quant_trading_system()
 
-        # Performance output
-        self.statistics = self._create_statistics()
+        self.qts = self._create_quant_trading_system()
+        self.equity_curve = []
+        self.target_allocations = []
 
     def _is_rebalance_event(self, dt):
         """
@@ -191,15 +223,11 @@ class BacktestTradingSession(TradingSession):
         `SimulatedBroker`
             The simulated broker instance.
         """
-        acct_name = 'Backtest Simulated Broker Account'
-        self.portfolio_id = '000001'
-        self.portfolio_name = 'Backtest Simulated Broker Portfolio'
-
         broker = SimulatedBroker(
             self.start_dt,
             self.exchange,
             self.data_handler,
-            account_id=acct_name,
+            account_id=self.account_name,
             initial_funds=self.initial_cash,
             fee_model=self.fee_model
         )
@@ -228,8 +256,6 @@ class BacktestTradingSession(TradingSession):
         Creates the list of rebalance timestamps used to determine when
         to execute the quant trading strategy throughout the backtest.
 
-        TODO: Currently supports only weekly rebalances.
-
         Returns
         -------
         `List[pd.Timestamp]`
@@ -242,7 +268,9 @@ class BacktestTradingSession(TradingSession):
                 'QSTrader does not yet support daily rebalancing.'
             )
         elif self.rebalance == 'weekly':
-            rebalancer = WeeklyRebalance(self.start_dt, self.end_dt, 'WED')
+            rebalancer = WeeklyRebalance(
+                self.start_dt, self.end_dt, self.rebalance_weekday
+            )
         elif self.rebalance == 'end_of_month':
             rebalancer = EndOfMonthRebalance(self.start_dt, self.end_dt)
         else:
@@ -270,31 +298,72 @@ class BacktestTradingSession(TradingSession):
             self.portfolio_id,
             self.data_handler,
             self.alpha_model,
+            self.cash_buffer_percentage,
             submit_orders=True
         )
         return qts
 
-    def _create_statistics(self):
+    def _update_equity_curve(self, dt):
         """
-        Create a statistics instance to process the results of the
-        trading backtest.
+        Update the equity curve values.
+
+        Parameters
+        ----------
+        dt : `pd.Timestamp`
+            The time at which the total account equity is obtained.
         """
-        return TearsheetStatistics(self.broker, title='Backtest Simulation')
+        self.equity_curve.append(
+            (dt, self.broker.get_account_total_equity()["master"])
+        )
 
     def output_holdings(self):
         """
         Output the portfolio holdings to the console.
         """
-        pprint.pprint(
-            self.broker.portfolios[self.portfolio_id].pos_handler.positions
-        )
+        self.broker.portfolios[self.portfolio_id].holdings_to_console()
 
-    def run(self):
+    def get_equity_curve(self):
+        """
+        Returns the equity curve as a Pandas DataFrame.
+
+        Returns
+        -------
+        `pd.DataFrame`
+            The datetime-indexed equity curve of the strategy.
+        """
+        equity_df = pd.DataFrame(
+            self.equity_curve, columns=['Date', 'Equity']
+        ).set_index('Date')
+        equity_df.index = equity_df.index.date
+        return equity_df
+
+    def get_target_allocations(self):
+        """
+        Returns the target allocations as a Pandas DataFrame
+        utilising the same index as the equity curve with
+        forward-filled dates.
+
+        Returns
+        -------
+        `pd.DataFrame`
+            The datetime-indexed target allocations of the strategy.
+        """
+        equity_curve = self.get_equity_curve()
+        alloc_df = pd.DataFrame(self.target_allocations).set_index('Date')
+        alloc_df.index = alloc_df.index.date
+        alloc_df = alloc_df.reindex(index=equity_curve.index, method='ffill')
+        if self.burn_in_dt is not None:
+            alloc_df = alloc_df[self.burn_in_dt:]
+        return alloc_df
+
+    def run(self, results=True):
         """
         Execute the simulation engine by iterating over all
         simulation events, rebalancing the quant trading
         system at the appropriate schedule.
         """
+        stats = {'target_allocations': []}
+
         for event in self.sim_engine:
             # Output the system event and timestamp
             dt = event.ts
@@ -307,14 +376,21 @@ class BacktestTradingSession(TradingSession):
             # out a full run of the quant trading system
             if self._is_rebalance_event(dt):
                 print(event.ts, "REBALANCE")
-                self.qts(dt)
+                self.qts(dt, stats=stats)
 
             # Out of market hours we want a daily
-            # performance update
+            # performance update, but only if we
+            # are past the 'burn in' period
             if event.event_type == "post_market":
-                self.statistics.update(dt)
+                if self.burn_in_dt is not None:
+                    if dt >= self.burn_in_dt:
+                        self._update_equity_curve(dt)
+                else:
+                    self._update_equity_curve(dt)
+
+        self.target_allocations = stats['target_allocations']
 
         # At the end of the simulation output the
         # holdings and plot the tearsheet
-        self.output_holdings()
-        self.statistics.plot_results()
+        if results:
+            self.output_holdings()
