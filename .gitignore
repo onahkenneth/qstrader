@@ -38,3 +38,6 @@ cover
 
 # Textmate (a Mac editor) meta files
 ._*
+
+/data
+/.idea
