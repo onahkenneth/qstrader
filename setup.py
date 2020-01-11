@@ -25,20 +25,20 @@ setup(
     # the version across setup.py and the project code, see
     # https://packaging.python.org/en/latest/development.html#single-sourcing-the-version
     #version='0.0.2',
-    version=__version__,
+    version=0.1.0,
 
     description='QuantStart.com - Advanced Trading Infrastructure',
     long_description=long_description,
-
+    long_description_content_type="text/markdown",
     # The project's main homepage.
-    url=__url__,
+    url='https://github.com/onahkenneth/qstrader.git',
 
     # Author details
-    author=__author__,
-    author_email=__email__,
+    author='Kenneth Onah',
+    author_email='onah.kenneth@gmail.com',
 
     # Choose your license
-    license=__license__,
+    license="MIT",
 
     # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers=[
