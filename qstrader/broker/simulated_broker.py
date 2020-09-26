@@ -1,5 +1,3 @@
-import logging
-from math import floor
 import queue
 
 import numpy as np
@@ -53,7 +51,7 @@ class SimulatedBroker(Broker):
         account_id=None,
         base_currency="USD",
         initial_funds=0.0,
-        fee_model=ZeroFeeModel,
+        fee_model=ZeroFeeModel(),
         slippage_model=None,
         market_impact_model=None
     ):
@@ -73,12 +71,8 @@ class SimulatedBroker(Broker):
         self.portfolios = self._set_initial_portfolios()
         self.open_orders = self._set_initial_open_orders()
 
-        self.logger = logging.getLogger('SimulatedBroker')
-        self.logger.setLevel(logging.DEBUG)
-        self.logger.info(
-            '(%s) SimulatedBroker instance initialised' %
-            self.current_dt.strftime(settings.LOGGING["DATE_FORMAT"])
-        )
+        if settings.PRINT_EVENTS:
+            print('Initialising simulated broker "%s"...' % self.account_id)
 
     def _set_base_currency(self, base_currency):
         """
@@ -145,13 +139,13 @@ class SimulatedBroker(Broker):
         `FeeModel` (instance)
             The instantiated FeeModel class.
         """
-        if issubclass(fee_model, FeeModel):
-            return fee_model()
+        if issubclass(fee_model.__class__, FeeModel):
+            return fee_model
         else:
             raise TypeError(
                 "Provided fee model '%s' in SimulatedBroker is not a "
                 "FeeModel subclass, so could not create the "
-                "Broker entity." % fee_model
+                "Broker entity." % fee_model.__class__
             )
 
     def _set_cash_balances(self):
@@ -212,12 +206,12 @@ class SimulatedBroker(Broker):
                 "'%s' to the broker account." % amount
             )
         self.cash_balances[self.base_currency] += amount
-        self.logger.info(
-            '(%s) %0.2f subscribed to broker account "%s"' % (
-                self.current_dt.strftime(settings.LOGGING["DATE_FORMAT"]),
-                amount, self.account_id
+        if settings.PRINT_EVENTS:
+            print(
+                '(%s) - subscription: %0.2f subscribed to broker account "%s"' % (
+                    self.current_dt, amount, self.account_id
+                )
             )
-        )
 
     def withdraw_funds_from_account(self, amount):
         """
@@ -245,12 +239,12 @@ class SimulatedBroker(Broker):
                 )
             )
         self.cash_balances[self.base_currency] -= amount
-        self.logger.info(
-            '(%s) %0.2f withdrawn from broker account "%s"' % (
-                self.current_dt.strftime(settings.LOGGING["DATE_FORMAT"]),
-                amount, self.account_id
+        if settings.PRINT_EVENTS:
+            print(
+                '(%s) - withdrawal: %0.2f withdrawn from broker account "%s"' % (
+                    self.current_dt, amount, self.account_id
+                )
             )
-        )
 
     def get_account_cash_balance(self, currency=None):
         """
@@ -274,9 +268,9 @@ class SimulatedBroker(Broker):
             )
         return self.cash_balances[currency]
 
-    def get_account_non_cash_equity(self):
+    def get_account_total_market_value(self):
         """
-        Retrieve the total non-cash equity of the account, across
+        Retrieve the total market value of the account, across
         each portfolio.
 
         Returns
@@ -287,7 +281,7 @@ class SimulatedBroker(Broker):
         tmv_dict = {}
         master_tmv = 0.0
         for portfolio in self.portfolios.values():
-            pmv = self.get_portfolio_non_cash_equity(
+            pmv = self.get_portfolio_market_value(
                 portfolio.portfolio_id
             )
             tmv_dict[portfolio.portfolio_id] = pmv
@@ -343,12 +337,12 @@ class SimulatedBroker(Broker):
             )
             self.portfolios[portfolio_id_str] = p
             self.open_orders[portfolio_id_str] = queue.Queue()
-            self.logger.info(
-                '(%s) Portfolio "%s" created at broker "%s"' % (
-                    self.current_dt.strftime(settings.LOGGING["DATE_FORMAT"]),
-                    portfolio_id_str, self.account_id
+            if settings.PRINT_EVENTS:
+                print(
+                    '(%s) - portfolio creation: Portfolio "%s" created at broker "%s"' % (
+                        self.current_dt, portfolio_id_str, self.account_id
+                    )
                 )
-            )
 
     def list_all_portfolios(self):
         """
@@ -401,12 +395,12 @@ class SimulatedBroker(Broker):
             )
         self.portfolios[portfolio_id].subscribe_funds(self.current_dt, amount)
         self.cash_balances[self.base_currency] -= amount
-        self.logger.info(
-            '(%s) %0.2f subscribed to portfolio "%s"' % (
-                self.current_dt.strftime(settings.LOGGING["DATE_FORMAT"]),
-                amount, portfolio_id
+        if settings.PRINT_EVENTS:
+            print(
+                '(%s) - subscription: %0.2f subscribed to portfolio "%s"' % (
+                    self.current_dt, amount, portfolio_id
+                )
             )
-        )
 
     def withdraw_funds_from_portfolio(self, portfolio_id, amount):
         """
@@ -433,26 +427,26 @@ class SimulatedBroker(Broker):
                 "withdraw funds from a non-existent "
                 "portfolio. " % portfolio_id
             )
-        if amount > self.portfolios[portfolio_id].total_cash:
+        if amount > self.portfolios[portfolio_id].cash:
             raise ValueError(
                 "Not enough cash in portfolio '%s' to withdraw "
                 "into brokerage master account. Withdrawal "
                 "amount %0.2f exceeds current portfolio cash "
                 "balance of %0.2f." % (
                     portfolio_id, amount,
-                    self.portfolios[portfolio_id].total_cash
+                    self.portfolios[portfolio_id].cash
                 )
             )
         self.portfolios[portfolio_id].withdraw_funds(
             self.current_dt, amount
         )
         self.cash_balances[self.base_currency] += amount
-        self.logger.info(
-            '(%s) %0.2f withdrawn from portfolio "%s"' % (
-                self.current_dt.strftime(settings.LOGGING["DATE_FORMAT"]),
-                amount, portfolio_id
+        if settings.PRINT_EVENTS:
+            print(
+                '(%s) - withdrawal: %0.2f withdrawn from portfolio "%s"' % (
+                    self.current_dt, amount, portfolio_id
+                )
             )
-        )
 
     def get_portfolio_cash_balance(self, portfolio_id):
         """
@@ -475,11 +469,11 @@ class SimulatedBroker(Broker):
                 "retrieve cash balance for non-existent "
                 "portfolio." % portfolio_id
             )
-        return self.portfolios[portfolio_id].total_cash
+        return self.portfolios[portfolio_id].cash
 
-    def get_portfolio_non_cash_equity(self, portfolio_id):
+    def get_portfolio_total_market_value(self, portfolio_id):
         """
-        Returns the current total non-cash equity of a Portfolio
+        Returns the current total market value of a Portfolio
         with ID 'portfolio_id'.
 
         Parameters
@@ -490,15 +484,15 @@ class SimulatedBroker(Broker):
         Returns
         -------
         `float`
-            The non-cash equity of the portfolio.
+            The total market value of the portfolio.
         """
         if portfolio_id not in self.portfolios.keys():
             raise KeyError(
                 "Portfolio with ID '%s' does not exist. "
-                "Cannot return non-cash equity for a "
+                "Cannot return total market value for a "
                 "non-existent portfolio." % portfolio_id
             )
-        return self.portfolios[portfolio_id].total_non_cash_equity
+        return self.portfolios[portfolio_id].total_market_value
 
     def get_portfolio_total_equity(self, portfolio_id):
         """
@@ -527,8 +521,7 @@ class SimulatedBroker(Broker):
         """
         Return a particular portfolio with ID 'portolio_id' as
         a dictionary with Asset symbol strings as keys, with various
-        attributes as sub-dictionaries. This includes 'quantity',
-        'book_cost', 'market_value', 'gain' and 'perc_gain'.
+        attributes as sub-dictionaries.
 
         Parameters
         ----------
@@ -591,16 +584,16 @@ class SimulatedBroker(Broker):
         # Check that sufficient cash exists to carry out the
         # order, else scale it down
         est_total_cost = consideration + total_commission
-        total_cash = self.portfolios[portfolio_id].total_cash
+        total_cash = self.portfolios[portfolio_id].cash
 
         scaled_quantity = order.quantity
         if est_total_cost > total_cash:
-            print(
-                "WARNING: Estimated transaction size of %0.2f exceeds "
-                "available cash of %0.2f. Reducing quantity to allow "
-                "transaction to succeed." % (est_total_cost, total_cash)
-            )
-            scaled_quantity = int(floor(total_cash / price))
+            if settings.PRINT_EVENTS:
+                print(
+                    "WARNING: Estimated transaction size of %0.2f exceeds "
+                    "available cash of %0.2f. Transaction will still occur "
+                    "with a negative cash balance." % (est_total_cost, total_cash)
+                )
 
         # Create a transaction entity and update the portfolio
         txn = Transaction(
@@ -608,16 +601,15 @@ class SimulatedBroker(Broker):
             price, order.order_id, commission=total_commission
         )
         self.portfolios[portfolio_id].transact_asset(txn)
-        self.logger.info(
-            '(%s) Order executed for %s - Qty: %s, '
-            'Price: %0.2f, Consideration: %0.2f, '
-            'Commission: %0.2f, Total Cost: %0.2f' % (
-                self.current_dt.strftime(settings.LOGGING["DATE_FORMAT"]),
-                order.asset, scaled_quantity,
-                price, consideration, total_commission,
-                consideration + total_commission
+        if settings.PRINT_EVENTS:
+            print(
+                "(%s) - executed order: %s, qty: %s, price: %0.2f, "
+                "consideration: %0.2f, commission: %0.2f, total: %0.2f" % (
+                    self.current_dt, order.asset, scaled_quantity, price,
+                    consideration, total_commission,
+                    consideration + total_commission
+                )
             )
-        )
 
     def submit_order(self, portfolio_id, order):
         """
@@ -648,12 +640,12 @@ class SimulatedBroker(Broker):
                 )
             )
         self.open_orders[portfolio_id].put(order)
-        self.logger.info(
-            '(%s) Order submitted for %s - Qty: %s' % (
-                self.current_dt.strftime(settings.LOGGING["DATE_FORMAT"]),
-                order.asset, order.quantity
+        if settings.PRINT_EVENTS:
+            print(
+                "(%s) - submitted order: %s, qty: %s" % (
+                    self.current_dt, order.asset, order.quantity
+                )
             )
-        )
 
     def update(self, dt):
         """
@@ -669,13 +661,12 @@ class SimulatedBroker(Broker):
         # Update portfolio asset values
         for portfolio in self.portfolios:
             for asset in self.portfolios[portfolio].pos_handler.positions:
-                if not asset.startswith('CASH'):
-                    mid_price = self.data_handler.get_asset_latest_mid_price(
-                        dt, asset
-                    )
-                    self.portfolios[portfolio].update_market_value_of_asset(
-                        asset, mid_price, self.current_dt
-                    )
+                mid_price = self.data_handler.get_asset_latest_mid_price(
+                    dt, asset
+                )
+                self.portfolios[portfolio].update_market_value_of_asset(
+                    asset, mid_price, self.current_dt
+                )
 
         # Try to execute orders
         if self.exchange.is_open_at_datetime(self.current_dt):

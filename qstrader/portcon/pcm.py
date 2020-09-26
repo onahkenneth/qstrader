@@ -1,3 +1,4 @@
+from qstrader import settings
 from qstrader.execution.order import Order
 
 
@@ -260,6 +261,11 @@ class PortfolioConstructionModel(object):
         else:
             weights = self._create_zero_target_weights_vector(dt)
 
+        # If a risk model is present use it to potentially
+        # override the alpha model weights
+        if self.risk_model:
+            weights = self.risk_model(dt, weights)
+
         # Run the portfolio optimisation
         optimised_weights = self.optimiser(dt, initial_weights=weights)
 
@@ -270,6 +276,10 @@ class PortfolioConstructionModel(object):
         full_weights = self._create_full_asset_weight_vector(
             full_zero_weights, optimised_weights
         )
+        if settings.PRINT_EVENTS:
+            print(
+                "(%s) - target weights: %s" % (dt, full_weights)
+            )
 
         # TODO: Improve this with a full statistics logging handler
         if stats is not None:
@@ -287,8 +297,6 @@ class PortfolioConstructionModel(object):
         rebalance_orders = self._generate_rebalance_orders(
             dt, target_portfolio, current_portfolio
         )
-
-        # TODO: Implement risk model
         # TODO: Implement cost model
 
         return rebalance_orders
